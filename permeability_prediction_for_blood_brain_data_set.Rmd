@@ -1,0 +1,152 @@
+---
+title: "Homework2Regression"
+author: "Sabbella Prasanna"
+date: "3/21/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{R message=FALSE, warning=FALSE}
+
+library(tidyverse)
+library(caret)
+library(dplyr)
+library(e1071)
+
+```
+## 1. I will be using the bloodbrain data set.
+
+## 2. The outcome variable in the data set is logBBB which is the log of the ratio of the concentration of a compound in the brain and the concentration in blood. The data frame bbbDescr contains 134 different molecular descriptors (predictors) of 208 such compounds. 
+
+- logBBB (outcome)\
+Data type = continuous numeric
+units = no units
+Minimum = 2.15000\
+1st Quartile = -0.42250\
+Median = 0.02000\
+Mean = -0.01889\
+3rd Quartile = 0.53000\   
+Maximum = 1.64000\
+Skewness = -0.4639672
+           
+```{R message=FALSE, warning=FALSE}
+data(BloodBrain)
+logBBB_df=data.frame(logBBB)
+ggplot(logBBB_df,aes(x=logBBB))+geom_histogram()
+#skewness(logBBB_df$logBBB)
+```
+
+# 3. Splitted the rows for training and testing 60% - 40%
+
+# 4. Model type and RMSE
+```{r message=FALSE, warning=FALSE}
+set.seed(10)
+
+blood_brain = cbind(bbbDescr, logBBB)
+
+blood_brain_var <- nearZeroVar(blood_brain)
+blood_brain_collinear <- findLinearCombos(cov(blood_brain))$remove
+blood_brain_main <- blood_brain[, -c(blood_brain_var, blood_brain_collinear)]
+
+
+training <- blood_brain_main$logBBB %>%
+  createDataPartition(p = 0.6, list = FALSE)
+blood_brain_main_train  <- blood_brain_main[training, ]
+blood_brain_main_test <- blood_brain_main[-training, ]
+
+
+folds <- createFolds(blood_brain_main$logBBB, k = 10, returnTrain = TRUE)
+ctrl <- trainControl(method = "cv", index = folds)
+
+```
+
+
+
+
+# linear regression with RMSE = 1.819
+```{r message=FALSE, warning=FALSE}
+
+#lmTuneFiltered <- train(x = blood_brain_processed_train_data,
+#                        y = blood_brain_processed_train_data$logBBB,
+#                        method = "lm",
+#                        trControl = ctrl)
+
+linear_regression_model = lm(logBBB ~., data = blood_brain_main_train)
+predictions = linear_regression_model %>% predict(blood_brain_main_test)
+RMSE = RMSE(predictions, blood_brain_main_test$logBBB)
+
+RMSE
+
+```
+# Regression tree with RMSE = 0.77
+```{r message=FALSE, warning=FALSE}
+
+set.seed(12)
+regressionTree <- train(
+  logBBB ~., data = blood_brain_main_train, method = "rpart",
+  trControl = trainControl("cv", number = 10),
+  tuneLength = 10)
+
+predictions <- regressionTree %>% predict(blood_brain_main_test)
+#head(predictions)
+# Compute the prediction error RMSE
+RMSE(predictions, blood_brain_main_test$logBBB)
+
+
+```
+
+
+
+
+# Neural nets with RMSE = 0.62
+```{r message=FALSE, warning=FALSE}
+nnetGrid <- expand.grid(
+decay = c(0.0, 5.0, 20.0, 80.0, 100.0),size = c(3),bag = FALSE)
+set.seed(100)
+avNNet_model <- train(logBBB ~., data = blood_brain_main_train,
+                        method = "avNNet",
+                        repeats = 3,
+                        tuneGrid = nnetGrid,
+                        trControl = trainControl("cv", number = 10),
+                        preProc = c("center", "scale"),
+                        linout = TRUE,
+                        trace = FALSE)
+
+predictions <- avNNet_model %>% predict(blood_brain_main_test)
+
+RMSE(predictions, blood_brain_main_test$logBBB)
+
+```
+# knn with RMSE = 0.705
+```{r  message=FALSE, warning=FALSE}
+set.seed(123)
+modelknn <- train(
+  logBBB~., data = blood_brain_main_train, method = "knn",
+  trControl = trainControl("cv", number = 10),
+  preProcess = c("center","scale","BoxCox"),
+  tuneLength = 10)
+
+# Make predictions on the test data
+predictions <- modelknn %>% predict(blood_brain_main_test)
+#head(predictions)
+# Compute the prediction error RMSE
+RMSE(predictions, blood_brain_main_test$logBBB)
+
+
+```
+
+# 5. Model parameter comparison with RMSE
+```{r message=FALSE, warning=FALSE}
+plot(modelknn)
+plot(avNNet_model)
+plot(regressionTree)
+```
+
+# 6. Best RMSE model
+- The least RMSE is achieved with avNNet_model with a value of 0.62
